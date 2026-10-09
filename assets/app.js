@@ -59,3 +59,21 @@ input?.addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { list.hidden = true; }
 });
 document.addEventListener('click', (e) => { if (list && !form.contains(e.target)) list.hidden = true; });
+
+// ---- open / closed status in header (store-local time from config) ----
+(() => {
+  const els = document.querySelectorAll('[data-open-status]'); if (!els.length) return;
+  try {
+    const tz = CONFIG.hours.timezone || 'America/New_York';
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(new Date()).map((p) => [p.type, p.value]));
+    const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday); const now = Number(parts.hour) * 60 + Number(parts.minute);
+    const mins = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+    const f12 = (s) => { const [h, m] = s.split(':').map(Number); return `${((h + 11) % 12) + 1}${m ? ':' + String(m).padStart(2, '0') : ''} ${h >= 12 ? 'PM' : 'AM'}`; };
+    const d = CONFIG.hours.days[dow]; let txt;
+    if (now >= mins(d.open) && now < mins(d.close)) txt = `Open now · until ${f12(d.close)}`;
+    else if (now < mins(d.open)) txt = `Opens today at ${f12(d.open)}`;
+    else { const n = CONFIG.hours.days[(dow + 1) % 7]; txt = `Closed · opens ${f12(n.open)} tomorrow`; }
+    els.forEach((el) => { el.textContent = txt; el.classList.add('is-set'); });
+    document.querySelectorAll(`.visit-hours [data-dow="${dow}"]`).forEach((li) => li.classList.add('today'));
+  } catch { /* keep static text */ }
+})();
