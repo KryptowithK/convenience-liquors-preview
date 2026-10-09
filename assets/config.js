@@ -151,8 +151,7 @@ export const CONFIG = {
     "Tequila & Mezcal",
     "Rum",
     "Cognac & Brandy",
-    "Liqueurs & Cordials",
-    "Other Spirits"
+    "Liqueurs & Cordials"
    ]
   },
   "beer": {
