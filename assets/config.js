@@ -140,7 +140,9 @@ export const CONFIG = {
     "White Wine",
     "Rosé",
     "Sparkling & Champagne",
-    "Sake & Fruit Wine"
+    "Dessert & Fortified",
+    "Sake & Fruit Wine",
+    "Other Wine"
    ]
   },
   "spirits": {
@@ -150,8 +152,11 @@ export const CONFIG = {
     "Vodka",
     "Tequila & Mezcal",
     "Rum",
+    "Gin",
     "Cognac & Brandy",
-    "Liqueurs & Cordials"
+    "Liqueurs & Cordials",
+    "Soju & Asian Spirits",
+    "Other Spirits"
    ]
   },
   "beer": {
@@ -169,7 +174,9 @@ export const CONFIG = {
    "label": "Mixers & More",
    "subs": [
     "Cocktail Mixers",
-    "Soda, Water & Juice"
+    "Soda, Water & Juice",
+    "Snacks & Candy",
+    "Bar Tools & Gifts"
    ]
   }
  }
