@@ -59,7 +59,7 @@ function sorter(s, rel) {
 }
 function facetCounts(list, key) { const m = new Map(); for (const p of list) { const k = key(p); if (k) m.set(k, (m.get(k) || 0) + 1); } return m; }
 function checkboxList(name, entries, selected, labelFn = (x) => x) {
-  return entries.map(([v, n]) => `<li><label><input type="checkbox" name="${name}" value="${esc(v)}" ${selected.includes(v) ? 'checked' : ''}> ${esc(labelFn(v))} <span class="ct">${n}</span></label></li>`).join('');
+  return entries.map(([v, n]) => `<li><label><input type="checkbox" name="${name}" value="${esc(v)}" ${selected.includes(v) ? 'checked' : ''}> ${esc(labelFn(v))}</label></li>`).join('');
 }
 function render() {
   const s = state;
@@ -82,10 +82,10 @@ function render() {
   const bands = PRICE_BANDS.map((b) => [b.join('-'), fPriceList.filter((p) => p.price >= b[0] && p.price < b[1]).length]).filter(([, n]) => n);
   const ae = document.activeElement; const focusSel = ae && ae.closest('#facets') ? (ae.name ? `[name="${ae.name}"][value="${CSS.escape(ae.value)}"]` : ae.id ? '#' + ae.id : null) : null;
   facetsEl.innerHTML = `
-    ${CONFIG.catalog.outOfStock.mode === 'hide' ? '' : `<div class="facet"><label style="font-weight:600;padding:0"><input type="checkbox" name="stock" ${s.stock ? 'checked' : ''}> In stock only <span class="ct">${fStock}</span></label></div>`}
+    ${CONFIG.catalog.outOfStock.mode === 'hide' ? '' : `<div class="facet"><label style="font-weight:600;padding:0"><input type="checkbox" name="stock" ${s.stock ? 'checked' : ''}> In stock only</label></div>`}
     ${!preset.sub && subs.length ? `<div class="facet"><h3>Category</h3><ul>${checkboxList('sub', subs, s.sub)}</ul></div>` : ''}
     ${fStyle.size ? `<div class="facet"><h3>Whiskey style</h3><ul>${checkboxList('style', [...fStyle].sort((a, b) => b[1] - a[1]), s.style)}</ul></div>` : ''}
-    <div class="facet"><h3>Brand</h3><input type="search" id="brand-filter" placeholder="Find a brand" value="${esc(brandFilter)}" aria-label="Filter brands"><ul>${checkboxList('brand', shownBrands, s.brand)}</ul>${brands.length > 12 ? `<button class="more" type="button" id="brand-more">${brandShowAll.v ? 'Show fewer' : `Show all ${brands.length}`}</button>` : ''}</div>
+    <div class="facet"><h3>Brand</h3><input type="search" id="brand-filter" placeholder="Find a brand" value="${esc(brandFilter)}" aria-label="Filter brands"><ul>${checkboxList('brand', shownBrands, s.brand)}</ul>${brands.length > 12 ? `<button class="more" type="button" id="brand-more">${brandShowAll.v ? 'Show fewer' : 'Show all brands'}</button>` : ''}</div>
     <div class="facet"><h3>Size</h3><ul>${checkboxList('size', sizes, s.size)}</ul></div>
     <div class="facet"><h3>Price</h3><ul>${checkboxList('price', bands, s.band, (v) => bandLabel(v.split('-').map(Number)))}</ul>
       <div class="price-inputs" style="margin-top:8px"><input id="pmin" type="number" min="0" placeholder="Min $" value="${esc(s.pmin)}" aria-label="Minimum price"><span>–</span><input id="pmax" type="number" min="0" placeholder="Max $" value="${esc(s.pmax)}" aria-label="Maximum price"><button class="btn btn-sm" id="price-go" type="button">Go</button></div></div>`;
@@ -100,7 +100,7 @@ function render() {
   // results
   const pages = Math.max(1, Math.ceil(results.length / PAGE)); if (s.page > pages) s.page = pages;
   const slice = results.slice((s.page - 1) * PAGE, s.page * PAGE);
-  countEl.textContent = `${results.length.toLocaleString()} product${results.length === 1 ? '' : 's'}${s.q ? ` for “${s.q}”` : ''}`;
+  countEl.textContent = s.q ? `Results for “${s.q}”` : ''; // no item counts shown (owner request)
   grid.innerHTML = slice.length ? slice.map(card).join('') : `<div class="empty" style="grid-column:1/-1"><h3>No products match</h3><p>Try removing a filter or searching for something else.</p></div>`;
   sortEl.value = s.sort;
   const btn = (n, lbl = n) => `<button type="button" data-page="${n}" ${n === s.page ? 'aria-current="page"' : ''} aria-label="Page ${n}">${lbl}</button>`;
