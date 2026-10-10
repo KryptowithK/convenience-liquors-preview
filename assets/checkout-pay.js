@@ -1,4 +1,5 @@
-// Online checkout: Square Web Payments SDK card (+ optional Google Pay), pickup or Uber Direct delivery.
+// Online checkout: Square Web Payments SDK card + Apple Pay (Safari/iOS only) + optional Google Pay, optional PayPal / Venmo
+// (staged: only when config.payments.paypal is present), pickup or Uber Direct delivery.
 // Prices, tax, delivery fee and the final total always come from the checkout API (never computed client-side).
 import { CONFIG } from './config.js';
 import { getCart, clearCart, saveCart } from './cart-store.js';
@@ -99,34 +100,104 @@ async function getQuote() {
 }
 
 // ---------- payment methods ----------
-let card = null, gpay = null, payReq = null, payments = null;
+let card = null, gpay = null, applePay = null, payReq = null, payments = null;
+const METHOD_LABEL = new Map(); // tokenizer -> label shown on the confirmation ("Apple Pay", "Google Pay")
+function loadScript(src, globalName) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script'); s.src = src;
+    s.onload = () => (window[globalName] ? res(window[globalName]) : rej(new Error(globalName))); s.onerror = () => rej(new Error(globalName)); document.head.appendChild(s);
+  });
+}
 function loadSdk() {
   if (P.provider === 'mock') return Promise.resolve(null);
-  return new Promise((res, rej) => {
-    const s = document.createElement('script');
-    s.src = P.squareEnv === 'sandbox' ? 'https://sandbox.web.squarecdn.com/v1/square.js' : 'https://web.squarecdn.com/v1/square.js';
-    s.onload = () => res(window.Square); s.onerror = () => rej(new Error('sdk')); document.head.appendChild(s);
-  });
+  return loadScript(P.squareEnv === 'sandbox' ? 'https://sandbox.web.squarecdn.com/v1/square.js' : 'https://web.squarecdn.com/v1/square.js', 'Square');
 }
 // Test-only stand-in (payments.provider = "mock" in a local build): renders a plain field and returns test nonces.
 const mockCard = { async attach(sel) { document.querySelector(sel).innerHTML = '<label for="mock-card">Card (test mode)</label><input id="mock-card" value="4111 1111 1111 1111" autocomplete="off">'; },
   async tokenize() { const v = document.getElementById('mock-card').value; return /decline/i.test(v) ? { status: 'OK', token: 'cnon:card-nonce-declined' } : /^[\d ]{12,}$/.test(v) ? { status: 'OK', token: 'cnon:card-nonce-ok' } : { status: 'Invalid', errors: [{ message: 'Card number is invalid.' }] }; } };
+const totalReq = () => ({ amount: (state.totals ? state.totals.totalCents / 100 : 1).toFixed(2), label: CONFIG.store.name || 'Total' });
 async function initPayments() {
+  initPayPal(); // independent of Square (no-op unless PayPal is configured)
   try {
     const Square = await loadSdk();
     if (!Square) { card = mockCard; await card.attach('#card-container'); return; }
     payments = Square.payments(P.squareApplicationId, P.squareLocationId);
     card = await payments.card(); document.getElementById('card-container').innerHTML = ''; await card.attach('#card-container');
+    if (P.applePay || P.googlePay) payReq = payments.paymentRequest({ countryCode: 'US', currencyCode: 'USD', total: totalReq() });
+    if (P.applePay) {
+      // Throws unless the browser supports Apple Pay (Safari on iPhone/iPad/Mac with a card in Wallet) and the domain is registered.
+      try {
+        applePay = await payments.applePay(payReq); METHOD_LABEL.set(applePay, 'Apple Pay');
+        const btn = document.getElementById('apple-pay-button');
+        // Apple requires tokenize() to start in the click handler with no await before it (submit() is synchronous up to tokenize).
+        btn.addEventListener('click', (e) => { e.preventDefault(); submit(applePay); });
+        document.getElementById('applepay-container').hidden = false;
+      } catch { applePay = null; }
+    }
     if (P.googlePay) {
       try {
-        payReq = payments.paymentRequest({ countryCode: 'US', currencyCode: 'USD', total: { amount: (state.totals ? state.totals.totalCents / 100 : 1).toFixed(2), label: 'Total' } });
-        gpay = await payments.googlePay(payReq); await gpay.attach('#gpay-container', { buttonColor: 'black', buttonSizeMode: 'fill', buttonType: 'pay' });
+        gpay = await payments.googlePay(payReq); METHOD_LABEL.set(gpay, 'Google Pay'); await gpay.attach('#gpay-container', { buttonColor: 'black', buttonSizeMode: 'fill', buttonType: 'pay' });
         document.getElementById('gpay-container').addEventListener('click', (e) => { e.preventDefault(); submit(gpay); });
       } catch { gpay = null; document.getElementById('gpay-container').innerHTML = ''; }
     }
   } catch { document.getElementById('card-container').innerHTML = `<p class="alert err">The secure card form couldn't load. Please refresh, or call <a href="tel:${CONFIG.store.phoneE164}">${esc(CONFIG.store.phone)}</a>.</p>`; }
 }
-function gpayUpdate() { if (payReq && state.totals) payReq.update({ total: { amount: (state.totals.totalCents / 100).toFixed(2), label: 'Total' } }); }
+function gpayUpdate() { if (payReq && state.totals) payReq.update({ total: totalReq() }); } // keeps Apple Pay + Google Pay sheets on the server total
+
+// PayPal + Venmo Smart Buttons (staged; rendered only when the build includes payments.paypal, Venmo only with paypal.venmo).
+// The Worker creates and captures the PayPal order for the server-priced total and records it in Square, so no prices are sent.
+async function initPayPal() {
+  const pc = P.paypal; const box = document.getElementById('paypal-container');
+  if (!pc || !pc.clientId || !box) return;
+  try {
+    // Pay Later / guest card funding stay off: cards already go through Square, and alcohol is a restricted category.
+    const q = `client-id=${encodeURIComponent(pc.clientId)}&currency=USD&intent=capture&components=buttons${pc.venmo ? '&enable-funding=venmo' : ''}&disable-funding=card,credit,paylater${pc.venmo ? '' : ',venmo'}`;
+    const paypal = await loadScript(`https://www.paypal.com/sdk/js?${q}`, 'paypal');
+    const sources = [['paypal', 'PayPal', { color: 'gold', label: 'paypal' }], ...(pc.venmo ? [['venmo', 'Venmo', { color: 'blue' }]] : [])];
+    let shown = 0;
+    for (const [fundingSource, label, look] of sources) {
+      const btn = paypal.Buttons(walletButton(fundingSource, label, look));
+      if (btn.isEligible && !btn.isEligible()) continue; // e.g. Venmo: US buyer with the Venmo app on a supported browser only
+      const el = document.createElement('div'); el.id = `${fundingSource}-button`; el.className = 'wallet-btn'; box.appendChild(el);
+      await btn.render(el); shown++;
+    }
+    box.hidden = !shown;
+  } catch { box.hidden = true; box.innerHTML = ''; }
+}
+function walletButton(fundingSource, label, look) {
+  return {
+    fundingSource,
+    style: { layout: 'horizontal', shape: 'rect', height: 48, tagline: false, ...look },
+    onClick: (data, actions) => {
+      if (state.busy || state.completed) return actions.reject();
+      errEl.hidden = true;
+      const errs = validate(); if (!errs.length && !state.totals) errs.push('Please wait for your total to load.');
+      if (errs.length) { showErr(errs); return actions.reject(); }
+      return actions.resolve();
+    },
+    createOrder: async () => {
+      const r = await api('/paypal/create-order', { ...orderBody(), fundingSource });
+      if (!r.ok || !r.d.ok) { failed(r.d, label); throw new Error(r.d.error || 'paypal_create'); }
+      if (r.d.totals) { state.totals = r.d.totals; renderSummary(); }
+      return r.d.paypalOrderId;
+    },
+    onApprove: async (data, actions) => {
+      if (state.completed) return;
+      state.busy = true; renderSummary(); payBtn.textContent = 'Processing…';
+      try {
+        const f = form, del = mode() === 'delivery';
+        let r;
+        try { r = await api('/checkout', { ...orderBody(), paymentMethod: 'paypal', fundingSource, paypalOrderId: data.orderID }); }
+        catch { showErr('Network problem — we could not confirm your order. Please check your email for a receipt before trying again, or call the store.'); return; }
+        if (r.ok && r.d && r.d.ok) { done(r.d, { name: f.name.value.trim(), del, address: address(), method: r.d.paymentMethod === 'venmo' ? 'Venmo' : 'PayPal' }); return; }
+        if (r.d.restart) { state.busy = false; return actions.restart(); } // funding source declined: let the buyer pick another one
+        failed(r.d, label);
+      } finally { state.busy = false; renderSummary(); }
+    },
+    onCancel: () => {},
+    onError: () => { if (errEl.hidden) showErr(`${label} could not complete the payment. You were not charged. Please try again or pay by card.`); },
+  };
+}
 
 function validate() {
   const f = form, errs = [];
@@ -139,6 +210,20 @@ function validate() {
   if (!f.age.checked) errs.push(`Please confirm you are ${CONFIG.legal.minAge} or older and will show valid photo ID.`);
   return errs;
 }
+function orderBody() {
+  const f = form, del = mode() === 'delivery', a = address();
+  return { idempotencyKey: state.idem, fulfillment: mode(), items: items(), expectedTotalCents: state.totals?.totalCents, ageConfirmed: true,
+    customer: { name: f.name.value.trim(), phone: f.phone.value.trim(), email: f.email.value.trim() }, notes: f.notes.value.trim(),
+    ...(del ? { address: a, quoteToken: state.quote?.quoteToken } : { pickupSlot: { date: dayEl.value, start: Number(timeEl.value) } }) };
+}
+function failed(d, via = 'card') {
+  // Definitive failure: next attempt is a new checkout (new idempotency key / order ref).
+  if (!['paypal_disabled', 'venmo_disabled'].includes(d.error)) state.idem = crypto.randomUUID();
+  if (d.error === 'price_changed' && d.totals) { state.totals = d.totals; showErr(`${d.message} New total: ${$c(d.totals.totalCents)}.`); }
+  else if (['quote_expired', 'quote_mismatch', 'invalid_quote'].includes(d.error)) { invalidateQuote(); showErr(d.message); }
+  else if (d.error === 'cart_changed') cartProblem(d);
+  else showErr(d.message || (via !== 'card' ? `${via} payment failed. You were not charged.` : 'Payment failed. Your card was not charged.'));
+}
 async function submit(method = card) {
   if (state.busy || state.completed) return; // no double submits; nothing to pay once the order is paid
   errEl.hidden = true;
@@ -150,19 +235,14 @@ async function submit(method = card) {
     const [given, ...rest] = f.name.value.trim().split(/\s+/);
     const verificationDetails = { amount: (state.totals.totalCents / 100).toFixed(2), currencyCode: 'USD', intent: 'CHARGE', customerInitiated: true, sellerKeyedIn: false,
       billingContact: { givenName: given, familyName: rest.join(' '), email: f.email.value.trim(), phone: f.phone.value.trim(), ...(del ? { addressLines: [a.line1, a.line2].filter(Boolean), city: a.city, state: 'NJ', postalCode: a.zip } : {}), countryCode: 'US' } };
+    // First await: wallet sheets (Apple Pay) must open synchronously from the click.
     const tok = method === card ? await card.tokenize(verificationDetails) : await method.tokenize();
-    if (tok.status !== 'OK') { showErr((tok.errors || []).map((e) => e.message).filter(Boolean)[0] || 'Please check your card details.'); return; }
-    const body = { idempotencyKey: state.idem, sourceId: tok.token, fulfillment: mode(), items: items(), expectedTotalCents: state.totals.totalCents, ageConfirmed: true,
-      customer: { name: f.name.value.trim(), phone: f.phone.value.trim(), email: f.email.value.trim() }, notes: f.notes.value.trim(),
-      ...(del ? { address: a, quoteToken: state.quote.quoteToken } : { pickupSlot: { date: dayEl.value, start: Number(timeEl.value) } }) };
+    if (tok.status !== 'OK') { if (method === card || tok.status !== 'Cancel') showErr((tok.errors || []).map((e) => e.message).filter(Boolean)[0] || (method === card ? 'Please check your card details.' : 'The payment was not completed. You were not charged.')); return; }
+    const body = { ...orderBody(), sourceId: tok.token };
     let r;
     try { r = await api('/checkout', body); } catch { showErr('Network problem — we could not confirm your order. Please check your email for a receipt before trying again, or call the store.'); return; }
-    if (r.ok && r.d && r.d.ok) { done(r.d, { name: f.name.value.trim(), del, address: a }); return; }
-    state.idem = crypto.randomUUID(); // definitive failure: next attempt is a new checkout
-    if (r.d.error === 'price_changed' && r.d.totals) { state.totals = r.d.totals; showErr(`${r.d.message} New total: ${$c(r.d.totals.totalCents)}.`); }
-    else if (['quote_expired', 'quote_mismatch', 'invalid_quote'].includes(r.d.error)) { invalidateQuote(); showErr(r.d.message); }
-    else if (r.d.error === 'cart_changed') cartProblem(r.d);
-    else showErr(r.d.message || 'Payment failed. Your card was not charged.');
+    if (r.ok && r.d && r.d.ok) { done(r.d, { name: f.name.value.trim(), del, address: a, method: METHOD_LABEL.get(method) || null }); return; }
+    failed(r.d);
   } finally { state.busy = false; renderSummary(); }
 }
 function done(d, ctx = {}) {
@@ -171,7 +251,7 @@ function done(d, ctx = {}) {
   const conf = { ref: d.ref, orderId: d.orderId || null, at: new Date().toISOString(), fulfillment: d.fulfillment, name: ctx.name || '',
     lines: (d.lines || state.lines || []).map((l) => ({ name: l.name, size: l.size || '', qty: l.qty, lineCents: l.lineCents })),
     totals: { subtotalCents: t.subtotalCents, deliveryFeeCents: t.deliveryFeeCents || 0, taxCents: t.taxCents, totalCents: t.totalCents },
-    chargedCents: Number.isInteger(d.chargedCents) ? d.chargedCents : t.totalCents, card: d.card || null, receiptUrl: d.receiptUrl || null,
+    chargedCents: Number.isInteger(d.chargedCents) ? d.chargedCents : t.totalCents, card: d.card || null, method: ctx.method || ({ paypal: 'PayPal', venmo: 'Venmo' }[d.paymentMethod] || null), receiptUrl: d.receiptUrl || null,
     pickupAt: d.pickupAt || null, address: d.address || (ctx.del ? ctx.address : null), trackingUrl: d.delivery?.trackingUrl || null };
   state.completed = conf;
   try { sessionStorage.setItem(CONF_KEY, JSON.stringify(conf)); } catch {}
@@ -184,7 +264,8 @@ function renderConfirmation(c) {
   const st = CONFIG.store, ad = st.address, tz = CONFIG.hours.timezone;
   const when = c.pickupAt ? new Date(c.pickupAt).toLocaleString('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
   const storeAddr = `${ad.street}, ${ad.locality}, ${ad.region} ${ad.postalCode}`;
-  const card = c.card && (c.card.brand || c.card.last4) ? `${esc(String(c.card.brand || 'Card').replace(/_/g, ' '))}${c.card.last4 ? ' ending in ' + esc(c.card.last4) : ''}` : '';
+  const cardTxt = c.card && (c.card.brand || c.card.last4) ? `${esc(String(c.card.brand || 'Card').replace(/_/g, ' '))}${c.card.last4 ? ' ending in ' + esc(c.card.last4) : ''}` : '';
+  const card = c.method ? `${esc(c.method)}${cardTxt ? ' (' + cardTxt + ')' : ''}` : cardTxt;
   const del = c.fulfillment === 'delivery', a = c.address;
   wrap.hidden = true; wrap.replaceChildren(); // remove the form + sidebar entirely (no stale Pay button or "Edit cart")
   const el = document.getElementById('confirmation'); el.hidden = false;

@@ -172,6 +172,7 @@ export const CONFIG = {
   "squareApplicationId": "sq0idp-SARxZIOR2z0zuyxWZb6TsA",
   "squareLocationId": "L02AT3BDRJF7E",
   "googlePay": true,
+  "applePay": true,
   "deliveryFeeCents": 799
  }
 };

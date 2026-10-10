@@ -238,6 +238,8 @@ body.gated{overflow:hidden}
 .three{display:grid;gap:12px;grid-template-columns:1fr 70px 110px}@media(max-width:420px){.three{grid-template-columns:1fr 1fr}.three .field:first-child{grid-column:1/-1}}
 .quote-box{margin:12px 0;padding:14px 16px;border:1px solid rgba(212,175,55,.6);border-radius:var(--radius);background:#faf7ee}.quote-box strong{font-size:1.1rem}.quote-box.err{border-color:#b3261e;background:#fdf1f0}
 .card-box{min-height:90px}.gpay{margin-bottom:12px}.gpay:empty{display:none}
+.applepay{margin-bottom:12px}.applepay[hidden]{display:none}.apple-pay-btn{display:block;width:100%;height:48px;border:0;border-radius:6px;cursor:pointer;padding:0;background:#000;-webkit-appearance:-apple-pay-button;appearance:-apple-pay-button;-apple-pay-button-type:pay;-apple-pay-button-style:black}
+.paypal{margin-bottom:12px;position:relative;z-index:0}.paypal .wallet-btn{min-height:48px;margin-bottom:10px}.paypal[hidden]{display:none}
 .alt-delivery{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}.alt-delivery p{font-size:.9rem;margin:0 0 8px;color:var(--muted,#666)}
 .co-lines{list-style:none;padding:0;margin:0 0 12px;font-size:.9rem}.co-lines li{display:flex;justify-content:space-between;gap:8px;padding:4px 0}.co-lines small{color:var(--muted,#666)}
 /* checkout confirmation: .cart-layout sets display:grid, which overrode the [hidden] attribute (form stayed visible after payment) */
