@@ -88,29 +88,13 @@ export const CONFIG = {
   },
   "delivery": {
    "enabled": true,
-   "fee": 5.99,
-   "minimumOrder": 15,
-   "minimumAppliesTo": "subtotal before delivery fee",
-   "radiusMiles": 5,
-   "mode": "radius",
-   "modeOptions": "radius = geocode the address and measure straight-line miles from store.geo (falls back to ZIP centroid) | zips = only allowedZips",
-   "geocoder": "nominatim",
-   "geocoderOptions": "nominatim (free OpenStreetMap, ~1 req/sec, no key) | zip (ZIP centroid only, offline) — swap in Google/Mapbox later in src/assets/delivery.js",
-   "allowedZips": [
-    "07054",
-    "07034",
-    "07058",
-    "07045",
-    "07936",
-    "07981",
-    "07046",
-    "07004",
-    "07927",
-    "07068",
-    "07005",
-    "07082",
-    "07878"
-   ]
+   "providers": [
+    "doordash",
+    "ubereats"
+   ],
+   "doordashUrl": "https://order.online/business/convenience-liquors-23567847",
+   "ubereatsUrl": "https://www.order.store/store/convenience-liquors-1129-us-highway-46/UhcPTSgsXhmivovl-o4uZg",
+   "note": "Delivery is fulfilled through DoorDash and Uber Eats (offered side by side as equal choices). The site only links to those stores: no site delivery orders, fee, radius or minimum. The cart is not passed to either."
   }
  },
  "orders": {
@@ -118,7 +102,7 @@ export const CONFIG = {
   "webhookUrl": "",
   "payment": {
    "online": false,
-   "note": "Payment is collected in store at pickup, or at the door on delivery. No online payment processor is integrated."
+   "note": "Payment is collected in store at pickup. Delivery orders are placed and paid on DoorDash or Uber Eats. No online payment processor is integrated."
   }
  },
  "legal": {

@@ -188,7 +188,7 @@ h1,h2,h3{font-family:var(--font-display);line-height:1.120;color:var(--charcoal)
 .summary{background:var(--cream);border:1px solid var(--line);border-radius:var(--radius);padding:20px;align-self:start;position:sticky;top:190px}.summary dl{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:0 0 14px}.summary dt{color:var(--muted)}.summary dd{margin:0;text-align:right;font-weight:600}.summary .total{font-size:1.2rem;border-top:1px solid var(--line);padding-top:8px}
 form .field{display:grid;gap:4px;margin-bottom:12px}form label{font-weight:600;font-size:.9rem}form input,form select,form textarea{padding:.75em .85em;border:1px solid #d6cec4;border-radius:10px;font:inherit;background:#fff;width:100%}form input:focus,form select:focus,form textarea:focus{outline:none;border-color:var(--burgundy);box-shadow:0 0 0 3px rgba(212,175,55,.22)}
 .two{display:grid;gap:12px}@media(min-width:640px){.two{grid-template-columns:1fr 1fr}}
-.seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.seg label{border:1.5px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;display:grid;gap:2px;font-weight:600}.seg label small{font-weight:400;color:var(--muted)}.seg input{position:absolute;opacity:0}.seg input:checked+label{border-color:var(--burgundy);background:#faf6ea;box-shadow:0 0 0 3px rgba(212,175,55,.2)}.seg input:focus-visible+label{outline:3px solid var(--gold)}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.seg label{border:1.5px solid var(--line);border-radius:var(--radius);padding:14px;cursor:pointer;display:grid;gap:2px;font-weight:600}.seg label small{font-weight:400;color:var(--muted)}.seg{position:relative}.seg input{position:absolute;opacity:0;top:10px;width:14px;height:14px;margin:0;z-index:1}.seg input:nth-of-type(1){left:8px}.seg input:nth-of-type(2){left:calc(50% + 13px)}.seg input:checked+label{border-color:var(--burgundy);background:#faf6ea;box-shadow:0 0 0 3px rgba(212,175,55,.2)}.seg input:focus-visible+label{outline:3px solid var(--gold)}
 fieldset{border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:0 0 16px}legend{font:600 1.050rem var(--font-display);padding:0 6px}
 .alert{border-radius:10px;padding:12px 14px;margin:10px 0;font-size:.92rem}.alert.err{background:#fdecea;color:#7a1c14;border:1px solid #f3c1bb}.alert.ok{background:#e9f5ee;color:#1d5235;border:1px solid #bfe0cb}.alert.info{background:#fbf6ea;color:#5b4515;border:1px solid #ecdcb2}
 .legal-list{margin:.4em 0 0;padding-left:1.2em;font-size:.88rem}
@@ -220,3 +220,17 @@ body.gated{overflow:hidden}
 .tbd{background:#fff4d6;border:1px dashed #c9a45c;border-radius:8px;padding:2px 6px;font-size:.85em}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media print{.site-header,.topbar,.site-footer,.no-print,.age-gate{display:none!important}.confirm{max-width:none}}
+/* DoorDash delivery (v3) */
+.dd-panel{margin-top:14px;padding:20px;border:1px solid rgba(212,175,55,.6);border-radius:var(--radius);background:linear-gradient(180deg,#141414,#0b0b0b);color:#e9e4d8}.dd-panel h2{color:#fff;font-size:1.250rem;margin:0 0 .4em}.dd-panel p{margin:0 0 14px;font-size:.95rem}.dd-panel .dd-alt{margin:12px 0 0;font-size:.88rem;color:#bdb6a8}.dd-panel .link-btn{color:var(--gold-light);font-size:.88rem}
+.topbar .tb-dd a{color:var(--gold-light)}.topbar .tb-dd svg{width:16px;height:16px}
+@media(max-width:520px){.topbar .container{justify-content:space-between}.topbar .tb-dd span{white-space:nowrap}}
+.mainnav .nav-dd{color:var(--gold-light)}
+.perk-link{color:inherit;text-decoration:none}.perk-link:hover{color:var(--gold-deep);text-decoration:underline}
+.ft-perks span a{color:#bdb6a8;text-decoration:underline;text-underline-offset:2px}
+/* Uber Eats + DoorDash: equal side-by-side delivery choices (v3) */
+.del-btns{display:grid;gap:10px;margin:4px 0 0}@media(min-width:600px){.del-btns{grid-template-columns:1fr 1fr}}.del-btns .btn{width:100%;white-space:nowrap;text-align:center;padding:.85em 1em;font-size:.98rem}@media(max-width:359px){.del-btns .btn{white-space:normal}}
+.store-grid .del-btns{max-width:640px;margin:14px 0 8px}
+.dl-links a{white-space:nowrap}.perks-row .dl-links,.ft-perks .dl-links{display:block;color:inherit}
+.mainnav>ul>li>a{white-space:nowrap}
+.topbar .tb-dd{color:#d6d0c4}.topbar .tb-dd a{white-space:nowrap}
+@media(max-width:520px){.topbar .tb-lbl{display:none}.topbar .tb-item span{white-space:nowrap}.topbar{font-size:.78rem}}
