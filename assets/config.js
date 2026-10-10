@@ -102,7 +102,7 @@ export const CONFIG = {
   "webhookUrl": "",
   "payment": {
    "online": false,
-   "note": "Payment is collected in store at pickup. Delivery orders are placed and paid on DoorDash or Uber Eats. No online payment processor is integrated."
+   "note": "Pay securely online by card (Square). Pickup is free; $7.99 delivery via Uber (ID checked at the door), or order on DoorDash / Uber Eats."
   }
  },
  "legal": {
@@ -163,5 +163,15 @@ export const CONFIG = {
     "Bar Tools & Gifts"
    ]
   }
+ },
+ "payments": {
+  "enabled": true,
+  "provider": "square",
+  "apiBase": "https://convenience-checkout-api.convenienceliquors.workers.dev",
+  "squareEnv": "production",
+  "squareApplicationId": "sq0idp-SARxZIOR2z0zuyxWZb6TsA",
+  "squareLocationId": "L02AT3BDRJF7E",
+  "googlePay": true,
+  "deliveryFeeCents": 799
  }
 };

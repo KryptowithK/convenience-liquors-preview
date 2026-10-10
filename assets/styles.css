@@ -234,3 +234,9 @@ body.gated{overflow:hidden}
 .mainnav>ul>li>a{white-space:nowrap}
 .topbar .tb-dd{color:#d6d0c4}.topbar .tb-dd a{white-space:nowrap}
 @media(max-width:520px){.topbar .tb-lbl{display:none}.topbar .tb-item span{white-space:nowrap}.topbar{font-size:.78rem}}
+/* online checkout (Square + Uber Direct; shown only when payments are enabled) */
+.three{display:grid;gap:12px;grid-template-columns:1fr 70px 110px}@media(max-width:420px){.three{grid-template-columns:1fr 1fr}.three .field:first-child{grid-column:1/-1}}
+.quote-box{margin:12px 0;padding:14px 16px;border:1px solid rgba(212,175,55,.6);border-radius:var(--radius);background:#faf7ee}.quote-box strong{font-size:1.1rem}.quote-box.err{border-color:#b3261e;background:#fdf1f0}
+.card-box{min-height:90px}.gpay{margin-bottom:12px}.gpay:empty{display:none}
+.alt-delivery{margin-top:22px;padding-top:16px;border-top:1px solid var(--line)}.alt-delivery p{font-size:.9rem;margin:0 0 8px;color:var(--muted,#666)}
+.co-lines{list-style:none;padding:0;margin:0 0 12px;font-size:.9rem}.co-lines li{display:flex;justify-content:space-between;gap:8px;padding:4px 0}.co-lines small{color:var(--muted,#666)}
