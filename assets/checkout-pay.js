@@ -14,7 +14,11 @@ const delStatus = document.getElementById('delivery-status');
 const mode = () => form.fulfillment.value;
 const items = () => getCart().map((l) => ({ sku: l.sku, qty: l.qty }));
 const address = () => ({ line1: form.line1.value.trim(), line2: form.line2.value.trim(), city: form.city.value.trim(), state: 'NJ', zip: form.zip.value.trim() });
-let state = { totals: null, lines: null, quote: null, idem: crypto.randomUUID(), busy: false, deliveryOk: true };
+let state = { totals: null, lines: null, quote: null, idem: crypto.randomUUID(), busy: false, deliveryOk: true, completed: null };
+const CONF_KEY = 'cl_last_confirmation'; const CONF_TTL_MS = 12 * 3600 * 1000; // last paid order, shown again on reload (this tab only)
+function loadConfirmation() {
+  try { const c = JSON.parse(sessionStorage.getItem(CONF_KEY)); return c && c.ref && Date.now() - Date.parse(c.at) < CONF_TTL_MS ? c : null; } catch { return null; }
+}
 
 async function api(path, body) {
   const r = await fetch(API + path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
@@ -26,6 +30,7 @@ function showErr(msgs) {
   errEl.hidden = false; errEl.focus?.(); errEl.scrollIntoView({ block: 'center' });
 }
 function renderSummary() {
+  if (state.completed) return; // order paid: the confirmation screen replaces the form and summary
   const c = getCart(); const t = state.totals; const del = mode() === 'delivery';
   const lines = state.lines || c.map((l) => ({ name: l.name, size: l.size, qty: l.qty, lineCents: Math.round(l.qty * l.price * 100) }));
   sumEl.innerHTML = `<h2 style="font-size:1.2rem">Your order</h2><ul class="co-lines">${lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.size ? ' <small>' + esc(l.size) + '</small>' : ''}</span><span>${$c(l.lineCents)}</span></li>`).join('')}</ul>
@@ -125,7 +130,7 @@ function gpayUpdate() { if (payReq && state.totals) payReq.update({ total: { amo
 
 function validate() {
   const f = form, errs = [];
-  if (!getCart().length) errs.push('Your cart is empty.');
+  if (!getCart().length && !state.completed) errs.push('Your cart is empty.');
   if (f.name.value.trim().length < 2) errs.push('Please enter your name.');
   if (!/\d{3}.*\d{3}.*\d{4}/.test(f.phone.value)) errs.push('Please enter a valid phone number.');
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.value)) errs.push('Please enter a valid email address.');
@@ -135,11 +140,11 @@ function validate() {
   return errs;
 }
 async function submit(method = card) {
-  if (state.busy) return;
+  if (state.busy || state.completed) return; // no double submits; nothing to pay once the order is paid
   errEl.hidden = true;
   const errs = validate(); if (errs.length) { showErr(errs); return; }
   if (!state.totals) { showErr('Please wait for your total to load.'); return; }
-  state.busy = true; renderSummary(); payBtn.textContent = 'Processing…';
+  state.busy = true; renderSummary(); payBtn.disabled = true; payBtn.textContent = 'Processing…';
   try {
     const f = form, del = mode() === 'delivery', a = address();
     const [given, ...rest] = f.name.value.trim().split(/\s+/);
@@ -152,7 +157,7 @@ async function submit(method = card) {
       ...(del ? { address: a, quoteToken: state.quote.quoteToken } : { pickupSlot: { date: dayEl.value, start: Number(timeEl.value) } }) };
     let r;
     try { r = await api('/checkout', body); } catch { showErr('Network problem — we could not confirm your order. Please check your email for a receipt before trying again, or call the store.'); return; }
-    if (r.ok) { done(r.d); return; }
+    if (r.ok && r.d && r.d.ok) { done(r.d, { name: f.name.value.trim(), del, address: a }); return; }
     state.idem = crypto.randomUUID(); // definitive failure: next attempt is a new checkout
     if (r.d.error === 'price_changed' && r.d.totals) { state.totals = r.d.totals; showErr(`${r.d.message} New total: ${$c(r.d.totals.totalCents)}.`); }
     else if (['quote_expired', 'quote_mismatch', 'invalid_quote'].includes(r.d.error)) { invalidateQuote(); showErr(r.d.message); }
@@ -160,19 +165,56 @@ async function submit(method = card) {
     else showErr(r.d.message || 'Payment failed. Your card was not charged.');
   } finally { state.busy = false; renderSummary(); }
 }
-function done(d) {
-  const when = d.fulfillment === 'pickup' ? new Date(d.pickupAt).toLocaleString('en-US', { timeZone: CONFIG.hours.timezone, weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : null;
-  localStorage.setItem('cl_last_order', JSON.stringify({ ref: d.ref, at: new Date().toISOString(), fulfillment: d.fulfillment, totalCents: d.totals.totalCents }));
-  clearCart(); wrap.hidden = true; const conf = document.getElementById('confirmation'); conf.hidden = false;
-  conf.innerHTML = `<div class="alert ok"><h2 style="margin:0">Thank you! Order ${esc(d.ref)} is paid.</h2></div>
-  <p>${d.fulfillment === 'pickup' ? `Pickup: <strong>${esc(when)}</strong> at ${esc(CONFIG.store.address.street)}, ${esc(CONFIG.store.address.locality)}. Bring a valid photo ID.` : `An Uber courier is being assigned now.${d.delivery?.trackingUrl ? ` <a href="${esc(d.delivery.trackingUrl)}" target="_blank" rel="noopener">Track your delivery ↗</a>` : ''} Someone ${CONFIG.legal.minAge}+ with valid photo ID must receive it.`}</p>
-  <p>Total charged: <strong>${$c(d.totals.totalCents)}</strong> (incl. ${$c(d.totals.taxCents)} NJ sales tax${d.totals.deliveryFeeCents ? `, ${$c(d.totals.deliveryFeeCents)} delivery` : ''}).${d.receiptUrl ? ` <a href="${esc(d.receiptUrl)}" target="_blank" rel="noopener">View receipt ↗</a>` : ''}</p>
-  <p>Questions? Call <a href="tel:${CONFIG.store.phoneE164}">${esc(CONFIG.store.phone)}</a> and mention ${esc(d.ref)}.</p><p class="no-print"><a href="/convenience-liquors-preview/shop/">Continue shopping</a></p>`;
-  conf.focus(); window.scrollTo({ top: 0 });
+function done(d, ctx = {}) {
+  // Payment succeeded: build the confirmation from the SERVER response (Square totals), persist it, empty the cart, swap the screen.
+  const t = d.totals || {};
+  const conf = { ref: d.ref, orderId: d.orderId || null, at: new Date().toISOString(), fulfillment: d.fulfillment, name: ctx.name || '',
+    lines: (d.lines || state.lines || []).map((l) => ({ name: l.name, size: l.size || '', qty: l.qty, lineCents: l.lineCents })),
+    totals: { subtotalCents: t.subtotalCents, deliveryFeeCents: t.deliveryFeeCents || 0, taxCents: t.taxCents, totalCents: t.totalCents },
+    chargedCents: Number.isInteger(d.chargedCents) ? d.chargedCents : t.totalCents, card: d.card || null, receiptUrl: d.receiptUrl || null,
+    pickupAt: d.pickupAt || null, address: d.address || (ctx.del ? ctx.address : null), trackingUrl: d.delivery?.trackingUrl || null };
+  state.completed = conf;
+  try { sessionStorage.setItem(CONF_KEY, JSON.stringify(conf)); } catch {}
+  try { localStorage.setItem('cl_last_order', JSON.stringify({ ref: conf.ref, at: conf.at, fulfillment: conf.fulfillment, totalCents: conf.chargedCents })); } catch {}
+  clearCart(); // localStorage + 'cart:change' -> header badge repaints to 0
+  clearTimeout(expiryTimer);
+  renderConfirmation(conf);
+}
+function renderConfirmation(c) {
+  const st = CONFIG.store, ad = st.address, tz = CONFIG.hours.timezone;
+  const when = c.pickupAt ? new Date(c.pickupAt).toLocaleString('en-US', { timeZone: tz, weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  const storeAddr = `${ad.street}, ${ad.locality}, ${ad.region} ${ad.postalCode}`;
+  const card = c.card && (c.card.brand || c.card.last4) ? `${esc(String(c.card.brand || 'Card').replace(/_/g, ' '))}${c.card.last4 ? ' ending in ' + esc(c.card.last4) : ''}` : '';
+  const del = c.fulfillment === 'delivery', a = c.address;
+  wrap.hidden = true; wrap.replaceChildren(); // remove the form + sidebar entirely (no stale Pay button or "Edit cart")
+  const el = document.getElementById('confirmation'); el.hidden = false;
+  el.innerHTML = `<div class="alert ok conf-head"><h2>Thank you${c.name ? ', ' + esc(c.name.split(/\s+/)[0]) : ''}! Your order is paid.</h2>
+  <p>Order reference <strong id="conf-ref">${esc(c.ref)}</strong></p></div>
+  <div class="order-box">
+   <h3>${del ? 'Delivery' : 'Pickup'}</h3>
+   ${del ? `<p id="conf-when">An Uber courier is being assigned now${a ? ` to <strong>${esc([a.line1, a.line2].filter(Boolean).join(', '))}, ${esc(a.city)}, ${esc(a.state || 'NJ')} ${esc(a.zip)}</strong>` : ''}.${c.trackingUrl ? ` <a href="${esc(c.trackingUrl)}" target="_blank" rel="noopener">Track your delivery ↗</a>` : ''} Someone ${CONFIG.legal.minAge}+ with valid photo ID must receive it.</p>`
+     : `<p id="conf-when">Pickup: <strong>${esc(when)}</strong>. Bring a valid photo ID (${CONFIG.legal.minAge}+).</p>`}
+   <p class="conf-store"><strong>${esc(st.name)}</strong><br>${esc(storeAddr)}<br><a href="tel:${esc(st.phoneE164)}">${esc(st.phone)}</a></p>
+  </div>
+  <div class="order-box">
+   <h3>Your order</h3>
+   <ul class="co-lines" id="conf-lines">${c.lines.map((l) => `<li><span>${l.qty} × ${esc(l.name)}${l.size ? ' <small>' + esc(l.size) + '</small>' : ''}</span><span>${$c(l.lineCents)}</span></li>`).join('')}</ul>
+   <dl><dt>Subtotal</dt><dd id="conf-subtotal">${$c(c.totals.subtotalCents)}</dd>
+   ${del || c.totals.deliveryFeeCents ? `<dt>Delivery</dt><dd id="conf-fee">${c.totals.deliveryFeeCents ? $c(c.totals.deliveryFeeCents) : 'Free'}</dd>` : '<dt>Pickup</dt><dd>Free</dd>'}
+   <dt>NJ sales tax</dt><dd id="conf-tax">${$c(c.totals.taxCents)}</dd>
+   <dt class="total">Total charged</dt><dd class="total" id="conf-total">${$c(c.chargedCents)}</dd></dl>
+   ${card ? `<p id="conf-card">Paid with ${card}.</p>` : ''}${c.receiptUrl ? `<p><a href="${esc(c.receiptUrl)}" target="_blank" rel="noopener">View Square receipt ↗</a></p>` : ''}
+  </div>
+  <p>Questions? Call <a href="tel:${esc(st.phoneE164)}">${esc(st.phone)}</a> and mention ${esc(c.ref)}.</p>
+  <p class="no-print"><a class="btn" id="conf-continue" href="/convenience-liquors-preview/shop/">Continue shopping</a></p>`;
+  document.title = `Order ${c.ref} confirmed | ${st.name}`;
+  window.scrollTo({ top: 0 }); el.focus({ preventScroll: true });
 }
 
 // ---------- wiring ----------
-if (!getCart().length) { wrap.innerHTML = `<div class="empty" style="grid-column:1/-1"><h2>Your cart is empty</h2><a class="btn" href="/convenience-liquors-preview/shop/">Start shopping</a></div>`; }
+const lastConf = loadConfirmation();
+if (!getCart().length && lastConf) { state.completed = lastConf; renderConfirmation(lastConf); } // reload after paying: show it again
+else if (!getCart().length) { wrap.innerHTML = `<div class="empty" style="grid-column:1/-1"><h2>Your cart is empty</h2><a class="btn" href="/convenience-liquors-preview/shop/">Start shopping</a></div>`; }
 else {
   form.addEventListener('change', (e) => { if (e.target.name === 'fulfillment') setMode(); if (e.target === dayEl) fillSlots(); });
   ['line1', 'line2', 'city', 'zip'].forEach((n) => form[n].addEventListener('input', invalidateQuote));
